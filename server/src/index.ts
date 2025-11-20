@@ -7,6 +7,17 @@ import fs from 'fs';
 const app = express();
 const port = 3000;
 
+// Progress tracking
+interface JobProgress {
+  progress: number;
+  status: string;
+  complete: boolean;
+  result?: any;
+  error?: string;
+}
+
+const jobProgress = new Map<string, JobProgress>();
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -36,30 +47,82 @@ app.post('/upload', upload.single('video'), async (req, res) => {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  try {
-    const { VideoProcessor } = await import('./services/VideoProcessor');
-    const quality = req.body.quality || 'medium';
+  const jobId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  const quality = req.body.quality || 'medium';
 
-    const result = await VideoProcessor.processVideo({
-      inputPath: req.file.path,
-      outputDir: uploadDir,
-      filename: req.file.filename,
-      quality
-    });
+  // Initialize progress
+  jobProgress.set(jobId, {
+    progress: 0,
+    status: 'Starting...',
+    complete: false
+  });
 
-    res.json({ 
-      message: 'File processed successfully', 
-      filename: req.file.filename,
-      originalPath: `/uploads/${req.file.filename}`,
-      processedPath: `/uploads/${result.filename}`,
-      metadata: result.metadata
-    });
-  } catch (error) {
-    console.error('Processing error:', error);
-    res.status(500).json({ error: 'Video processing failed' });
-  }
+  // Return jobId immediately
+  res.json({ 
+    jobId,
+    filename: req.file.filename
+  });
+
+  // Process video in background
+  (async () => {
+    try {
+      const { VideoProcessor } = await import('./services/VideoProcessor');
+      
+      const result = await VideoProcessor.processVideo({
+        inputPath: req.file!.path,
+        outputDir: uploadDir,
+        filename: req.file!.filename,
+        quality,
+        onProgress: (progress: number, status: string) => {
+          jobProgress.set(jobId, {
+            progress,
+            status,
+            complete: false
+          });
+        }
+      });
+
+      // Mark as complete
+      jobProgress.set(jobId, {
+        progress: 100,
+        status: 'Complete',
+        complete: true,
+        result: {
+          message: 'File processed successfully',
+          filename: req.file!.filename,
+          originalPath: `/uploads/${req.file!.filename}`,
+          processedPath: `/uploads/${result.filename}`,
+          metadata: result.metadata
+        }
+      });
+
+      // Clean up after 5 minutes
+      setTimeout(() => {
+        jobProgress.delete(jobId);
+      }, 5 * 60 * 1000);
+    } catch (error) {
+      console.error('Processing error:', error);
+      jobProgress.set(jobId, {
+        progress: 0,
+        status: 'Error',
+        complete: true,
+        error: 'Video processing failed'
+      });
+    }
+  })();
 });
 
+// Progress endpoint
+app.get('/progress/:jobId', (req, res) => {
+  const { jobId } = req.params;
+  const progress = jobProgress.get(jobId);
+  
+  if (!progress) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  
+  res.json(progress);
+});
 app.post('/process-url', async (req, res) => {
   try {
     const { VideoProcessor } = await import('./services/VideoProcessor');

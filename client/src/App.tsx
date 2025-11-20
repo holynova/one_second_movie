@@ -45,6 +45,10 @@ function App() {
 
   const [inputMode, setInputMode] = useState<'file' | 'url'>('file');
   const [url, setUrl] = useState('');
+  
+  // Progress tracking
+  const [progress, setProgress] = useState(0);
+  const [processingStatus, setProcessingStatus] = useState('');
 
   const handleFileSelect = async (selectedFile: File) => {
     setFile(selectedFile);
@@ -61,10 +65,58 @@ function App() {
     await processVideo(null, url);
   };
 
+  const pollProgress = async (jobId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`http://localhost:3000/progress/${jobId}`);
+        if (!response.ok) {
+          clearInterval(pollInterval);
+          return;
+        }
+        
+        const data = await response.json();
+        setProgress(data.progress);
+        setProcessingStatus(data.status);
+        
+        if (data.complete) {
+          clearInterval(pollInterval);
+          
+          if (data.error) {
+            alert(data.error);
+            setFile(null);
+            setIsUploading(false);
+          } else if (data.result) {
+            setProcessedImage(`http://localhost:3000${data.result.processedPath}`);
+            
+            if (data.result.metadata) {
+              setVideoMetadata({
+                duration: data.result.metadata.duration,
+                size: data.result.metadata.size
+              });
+              setOutputStats({
+                totalFrames: data.result.metadata.totalFrames,
+                columns: data.result.metadata.columns,
+                rows: data.result.metadata.rows,
+                interval: data.result.metadata.interval
+              });
+            }
+            setIsUploading(false);
+          }
+        }
+      } catch (error) {
+        console.error('Error polling progress:', error);
+        clearInterval(pollInterval);
+        setIsUploading(false);
+      }
+    }, 500); // Poll every 500ms
+  };
+
   const processVideo = async (selectedFile: File | null, videoUrl?: string) => {
     setIsUploading(true);
     setProcessedImage(null);
     setOutputStats(null);
+    setProgress(0);
+    setProcessingStatus('Uploading...');
     
     try {
       let response;
@@ -95,26 +147,32 @@ function App() {
       }
 
       const data = await response.json();
-      setProcessedImage(`http://localhost:3000${data.processedPath}`);
       
-      // Update metadata and output stats
-      if (data.metadata) {
-        setVideoMetadata({
-          duration: data.metadata.duration,
-          size: data.metadata.size
-        });
-        setOutputStats({
-          totalFrames: data.metadata.totalFrames,
-          columns: data.metadata.columns,
-          rows: data.metadata.rows,
-          interval: data.metadata.interval
-        });
+      // If we got a jobId, start polling for progress
+      if (data.jobId) {
+        pollProgress(data.jobId);
+      } else {
+        // Old API response format (for URL processing)
+        setProcessedImage(`http://localhost:3000${data.processedPath}`);
+        
+        if (data.metadata) {
+          setVideoMetadata({
+            duration: data.metadata.duration,
+            size: data.metadata.size
+          });
+          setOutputStats({
+            totalFrames: data.metadata.totalFrames,
+            columns: data.metadata.columns,
+            rows: data.metadata.rows,
+            interval: data.metadata.interval
+          });
+        }
+        setIsUploading(false);
       }
     } catch (error) {
       console.error('Error processing video:', error);
       alert('Processing failed');
       setFile(null);
-    } finally {
       setIsUploading(false);
     }
   };
@@ -313,9 +371,38 @@ function App() {
             </div>
 
             {isUploading && (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                <p className="text-slate-400">Processing video... This may take a while.</p>
+              <div className="bg-slate-800/50 p-8 rounded-xl border border-slate-700">
+                <div className="space-y-6">
+                  {/* Status text */}
+                  <div className="text-center">
+                    <p className="text-lg font-medium text-white mb-1">
+                      {processingStatus || 'Processing...'}
+                    </p>
+                    <p className="text-sm text-slate-400">
+                      This may take a few minutes...
+                    </p>
+                  </div>
+                  
+                  {/* Progress bar */}
+                  <div className="relative">
+                    <div className="w-full bg-slate-700 rounded-full h-4 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-purple-500 via-pink-500 to-purple-600 h-full transition-all duration-300 ease-out"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-xs font-bold text-white drop-shadow-lg">
+                        {progress}%
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Spinner */}
+                  <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500" />
+                  </div>
+                </div>
               </div>
             )}
 

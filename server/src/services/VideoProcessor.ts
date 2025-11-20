@@ -10,6 +10,7 @@ interface ProcessOptions {
   interval?: number; // seconds between screenshots
   columns?: number;
   width?: number; // width of each screenshot
+  onProgress?: (progress: number, status: string) => void;
 }
 
 export class VideoProcessor {
@@ -25,7 +26,7 @@ export class VideoProcessor {
   };
 
   static async processVideo(options: ProcessOptions & { quality?: 'high' | 'medium' | 'low' }): Promise<{ filename: string; metadata: any }> {
-    const { inputPath, inputUrl, outputDir, filename, quality = 'medium' } = options;
+    const { inputPath, inputUrl, outputDir, filename, quality = 'medium', onProgress } = options;
     
     const input = inputUrl || inputPath;
     if (!input) {
@@ -63,6 +64,17 @@ export class VideoProcessor {
         console.log(`Frame size: ${frameWidth}x${frameHeight}`);
         console.log(`Output size: ${this.OUTPUT_WIDTH}x${this.OUTPUT_HEIGHT}`);
 
+        // Report initial progress
+        if (onProgress) {
+          onProgress(0, 'Initializing...');
+        }
+
+        // Use fixed interval for progress updates (500ms)
+        const progressUpdateInterval = 500; // Update every 500ms
+        
+        let simulatedProgress = 5;
+        let progressTimer: NodeJS.Timeout | null = null;
+
         ffmpeg(input)
           .outputOptions([
             `-vf fps=1/${interval},scale=${frameWidth}:${frameHeight},tile=${columns}x${rows}`
@@ -70,8 +82,46 @@ export class VideoProcessor {
           .frames(1)
           .on('start', (commandLine) => {
             console.log('Spawned Ffmpeg with command: ' + commandLine);
+            if (onProgress) {
+              onProgress(5, 'Processing video...');
+            }
+            
+            // Start simulated progress updates
+            progressTimer = setInterval(() => {
+              if (simulatedProgress < 95) {
+                // Slow down as we approach 95%
+                const increment = simulatedProgress < 50 ? 2 : (simulatedProgress < 80 ? 1 : 0.5);
+                simulatedProgress = Math.min(95, simulatedProgress + increment);
+                
+                console.log(`Progress update: ${Math.round(simulatedProgress)}%`);
+                
+                if (onProgress) {
+                  const timeProcessed = (simulatedProgress / 100) * duration;
+                  const minutes = Math.floor(timeProcessed / 60);
+                  const seconds = Math.floor(timeProcessed % 60);
+                  onProgress(
+                    Math.round(simulatedProgress), 
+                    `Processing: ${minutes}:${seconds.toString().padStart(2, '0')}`
+                  );
+                }
+              }
+            }, progressUpdateInterval);
+          })
+          .on('progress', (progress) => {
+            // This rarely fires with tile filter, but use it if available
+            if (onProgress && progress.percent) {
+              const percent = Math.min(Math.round(progress.percent), 99);
+              simulatedProgress = percent;
+              onProgress(percent, `Processing: ${progress.timemark || ''}`);
+            }
           })
           .on('end', () => {
+            if (progressTimer) {
+              clearInterval(progressTimer);
+            }
+            if (onProgress) {
+              onProgress(100, 'Complete');
+            }
             resolve({
               filename: outputFilename,
               metadata: {
@@ -90,6 +140,12 @@ export class VideoProcessor {
             });
           })
           .on('error', (err) => {
+            if (progressTimer) {
+              clearInterval(progressTimer);
+            }
+            if (onProgress) {
+              onProgress(0, 'Error occurred');
+            }
             reject(err);
           })
           .save(outputPath);
