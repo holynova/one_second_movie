@@ -153,8 +153,8 @@ function App() {
                   />
                   <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-4 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
                     <div className="font-semibold text-white mb-1">Low</div>
-                    <div className="text-xs text-slate-400">Fewer screenshots</div>
-                    <div className="text-xs text-slate-500 mt-1">5 columns, 60s interval</div>
+                    <div className="text-xs text-slate-400">32×32 grid</div>
+                    <div className="text-xs text-slate-500 mt-1">1,024 screenshots</div>
                   </div>
                 </label>
                 <label className="flex-1 cursor-pointer">
@@ -168,8 +168,8 @@ function App() {
                   />
                   <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-4 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
                     <div className="font-semibold text-white mb-1">Medium</div>
-                    <div className="text-xs text-slate-400">Balanced</div>
-                    <div className="text-xs text-slate-500 mt-1">10 columns, 30s interval</div>
+                    <div className="text-xs text-slate-400">64×64 grid</div>
+                    <div className="text-xs text-slate-500 mt-1">4,096 screenshots</div>
                   </div>
                 </label>
                 <label className="flex-1 cursor-pointer">
@@ -183,8 +183,8 @@ function App() {
                   />
                   <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-4 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
                     <div className="font-semibold text-white mb-1">High</div>
-                    <div className="text-xs text-slate-400">More screenshots</div>
-                    <div className="text-xs text-slate-500 mt-1">20 columns, 10s interval</div>
+                    <div className="text-xs text-slate-400">128×128 grid</div>
+                    <div className="text-xs text-slate-500 mt-1">16,384 screenshots</div>
                   </div>
                 </label>
               </div>
@@ -269,7 +269,7 @@ function App() {
                       />
                       <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-3 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
                         <div className="font-semibold text-white text-sm">Low</div>
-                        <div className="text-xs text-slate-500 mt-1">5 cols, 60s</div>
+                        <div className="text-xs text-slate-500 mt-1">32×32</div>
                       </div>
                     </label>
                     <label className="flex-1 cursor-pointer">
@@ -283,7 +283,7 @@ function App() {
                       />
                       <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-3 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
                         <div className="font-semibold text-white text-sm">Medium</div>
-                        <div className="text-xs text-slate-500 mt-1">10 cols, 30s</div>
+                        <div className="text-xs text-slate-500 mt-1">64×64</div>
                       </div>
                     </label>
                     <label className="flex-1 cursor-pointer">
@@ -297,7 +297,7 @@ function App() {
                       />
                       <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-3 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
                         <div className="font-semibold text-white text-sm">High</div>
-                        <div className="text-xs text-slate-500 mt-1">20 cols, 10s</div>
+                        <div className="text-xs text-slate-500 mt-1">128×128</div>
                       </div>
                     </label>
                   </div>
@@ -329,7 +329,7 @@ function App() {
                     <div className="grid grid-cols-4 gap-4 text-center">
                       <div>
                         <p className="text-xs text-slate-400 mb-1">Total Screenshots</p>
-                        <p className="text-lg font-bold text-purple-400">{outputStats.totalFrames}</p>
+                        <p className="text-lg font-bold text-purple-400">{outputStats.totalFrames.toLocaleString()}</p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-400 mb-1">Grid Size</p>
@@ -340,8 +340,8 @@ function App() {
                         <p className="text-lg font-bold text-purple-400">{outputStats.interval}s</p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-400 mb-1">Output Width</p>
-                        <p className="text-lg font-bold text-purple-400">3840px</p>
+                        <p className="text-xs text-slate-400 mb-1">Resolution</p>
+                        <p className="text-lg font-bold text-purple-400">3840×2160</p>
                       </div>
                     </div>
                   </div>

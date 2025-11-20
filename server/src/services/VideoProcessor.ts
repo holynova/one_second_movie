@@ -13,6 +13,17 @@ interface ProcessOptions {
 }
 
 export class VideoProcessor {
+  // Fixed output resolution (4K 2160p)
+  private static readonly OUTPUT_WIDTH = 3840;
+  private static readonly OUTPUT_HEIGHT = 2160;
+
+  // Quality presets with grid sizes
+  private static readonly QUALITY_GRIDS = {
+    high: { columns: 128, rows: 128 },
+    medium: { columns: 64, rows: 64 },
+    low: { columns: 32, rows: 32 }
+  };
+
   static async processVideo(options: ProcessOptions & { quality?: 'high' | 'medium' | 'low' }): Promise<{ filename: string; metadata: any }> {
     const { inputPath, inputUrl, outputDir, filename, quality = 'medium' } = options;
     
@@ -21,41 +32,10 @@ export class VideoProcessor {
       throw new Error('No input provided');
     }
 
-    // Configuration based on quality
-    // Target width 3840px (4K)
-    const width = 3840;
-    let columns: number;
-    let interval: number;
-
-    // We need duration to calculate interval dynamically if we want a specific density,
-    // or we can set fixed intervals/columns. 
-    // Let's try to make it "dense" vs "sparse".
-    
-    // Strategy:
-    // High: Many small shots. High density.
-    // Medium: Balanced.
-    // Low: Fewer large shots.
-    
-    // However, for a fixed width of 3840px:
-    // High: 20 columns -> ~192px width per frame
-    // Medium: 10 columns -> ~384px width per frame
-    // Low: 5 columns -> ~768px width per frame
-
-    switch (quality) {
-      case 'high':
-        columns = 20;
-        interval = 10; // Capture every 10 seconds (more frames)
-        break;
-      case 'low':
-        columns = 5;
-        interval = 60; // Capture every 60 seconds (fewer frames)
-        break;
-      case 'medium':
-      default:
-        columns = 10;
-        interval = 30; // Capture every 30 seconds
-        break;
-    }
+    // Get grid configuration for selected quality
+    const grid = this.QUALITY_GRIDS[quality];
+    const { columns, rows } = grid;
+    const totalFrames = columns * rows;
 
     const outputFilename = `processed-${filename}.jpg`;
     const outputPath = path.join(outputDir, outputFilename);
@@ -69,29 +49,23 @@ export class VideoProcessor {
         const duration = metadata.format.duration || 0;
         const size = metadata.format.size || 0;
         
-        // Calculate total frames
-        const totalFrames = Math.ceil(duration / interval);
-        const rows = Math.ceil(totalFrames / columns);
+        // Calculate interval based on duration and total frames needed
+        // Ensure we don't exceed video duration
+        const interval = duration / totalFrames;
         
-        // Calculate frame dimensions
-        // 4K width = 3840
-        // frameWidth = 3840 / columns
-        const frameWidth = Math.floor(width / columns);
-        const frameHeight = Math.floor(frameWidth * 9 / 16); // Assuming 16:9
+        // Calculate individual frame dimensions to fit the fixed output resolution
+        const frameWidth = Math.floor(this.OUTPUT_WIDTH / columns);
+        const frameHeight = Math.floor(this.OUTPUT_HEIGHT / rows);
         
-        // Total height check
-        const totalHeight = rows * frameHeight;
-        
-        // Cap if too huge (JPEG limit ~65k)
-        let finalRows = rows;
-        if (totalHeight > 60000) {
-           console.warn('Resulting image too tall, capping rows.');
-           finalRows = Math.floor(60000 / frameHeight);
-        }
+        console.log(`Processing with quality: ${quality}`);
+        console.log(`Grid: ${columns}x${rows} = ${totalFrames} frames`);
+        console.log(`Interval: ${interval.toFixed(2)}s`);
+        console.log(`Frame size: ${frameWidth}x${frameHeight}`);
+        console.log(`Output size: ${this.OUTPUT_WIDTH}x${this.OUTPUT_HEIGHT}`);
 
         ffmpeg(input)
           .outputOptions([
-            `-vf fps=1/${interval},scale=${frameWidth}:-1,tile=${columns}x${finalRows}`
+            `-vf fps=1/${interval},scale=${frameWidth}:${frameHeight},tile=${columns}x${rows}`
           ])
           .frames(1)
           .on('start', (commandLine) => {
@@ -105,9 +79,13 @@ export class VideoProcessor {
                 size,
                 totalFrames,
                 columns,
-                rows: finalRows,
-                interval,
-                quality
+                rows,
+                interval: parseFloat(interval.toFixed(2)),
+                quality,
+                outputWidth: this.OUTPUT_WIDTH,
+                outputHeight: this.OUTPUT_HEIGHT,
+                frameWidth,
+                frameHeight
               }
             });
           })
