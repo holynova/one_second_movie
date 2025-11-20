@@ -1,0 +1,12 @@
+{
+  "name": "one_second_movie",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"cd server && pnpm dev\" \"cd client && pnpm dev\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
