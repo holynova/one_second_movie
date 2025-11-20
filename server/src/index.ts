@@ -38,22 +38,21 @@ app.post('/upload', upload.single('video'), async (req, res) => {
 
   try {
     const { VideoProcessor } = await import('./services/VideoProcessor');
-    const interval = req.body.interval ? parseInt(req.body.interval) : 10;
-    const columns = req.body.columns ? parseInt(req.body.columns) : 5;
+    const quality = req.body.quality || 'medium';
 
-    const processedImage = await VideoProcessor.processVideo({
+    const result = await VideoProcessor.processVideo({
       inputPath: req.file.path,
       outputDir: uploadDir,
       filename: req.file.filename,
-      interval,
-      columns
+      quality
     });
 
     res.json({ 
       message: 'File processed successfully', 
       filename: req.file.filename,
       originalPath: `/uploads/${req.file.filename}`,
-      processedPath: `/uploads/${processedImage}`
+      processedPath: `/uploads/${result.filename}`,
+      metadata: result.metadata
     });
   } catch (error) {
     console.error('Processing error:', error);
@@ -62,32 +61,63 @@ app.post('/upload', upload.single('video'), async (req, res) => {
 });
 
 app.post('/process-url', async (req, res) => {
-  const { url, interval = 10, columns = 5 } = req.body;
-
-  if (!url) {
-    return res.status(400).json({ error: 'No URL provided' });
-  }
-
   try {
     const { VideoProcessor } = await import('./services/VideoProcessor');
-    // Generate a filename from URL or random
-    const filename = `stream-${Date.now()}`;
-    
-    const processedImage = await VideoProcessor.processVideo({
+    const { url, quality } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'No URL provided' });
+    }
+
+    const filename = `url-${Date.now()}`;
+    const result = await VideoProcessor.processVideo({
       inputUrl: url,
-      outputDir: uploadDir,
-      filename: filename,
-      interval: parseInt(interval),
-      columns: parseInt(columns)
+      outputDir: 'public/uploads',
+      filename,
+      quality: quality || 'medium'
     });
 
-    res.json({ 
-      message: 'URL processed successfully', 
-      processedPath: `/uploads/${processedImage}`
+    res.json({
+      message: 'URL processed successfully',
+      processedPath: `/uploads/${result.filename}`,
+      metadata: result.metadata
     });
   } catch (error) {
     console.error('Processing error:', error);
     res.status(500).json({ error: 'Video processing failed' });
+  }
+});
+
+app.post('/probe', async (req, res) => {
+  try {
+    const { VideoProcessor } = await import('./services/VideoProcessor');
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'No URL provided' });
+    }
+    const metadata = await VideoProcessor.getMetadata(url);
+    res.json(metadata);
+  } catch (error) {
+    console.error('Probe error:', error);
+    res.status(500).json({ error: 'Failed to probe video' });
+  }
+});
+
+app.post('/probe-file', async (req, res) => {
+  try {
+    const { VideoProcessor } = await import('./services/VideoProcessor');
+    const { filename } = req.body;
+    if (!filename) {
+      return res.status(400).json({ error: 'No filename provided' });
+    }
+    const filePath = path.join(uploadDir, filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    const metadata = await VideoProcessor.getMetadata(filePath);
+    res.json(metadata);
+  } catch (error) {
+    console.error('Probe error:', error);
+    res.status(500).json({ error: 'Failed to probe video' });
   }
 });
 
