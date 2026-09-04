@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"cd server && pnpm dev\" \"cd client && pnpm dev\""
+    "dev": "concurrently \"cd server && pnpm dev\" \"cd client && pnpm dev\"",
+    "build": "pnpm --dir client run build && node scripts/build-static.mjs",
+    "build:pages": "pnpm run build",
+    "lint": "pnpm --dir client run lint"
   },
   "keywords": [],
   "author": "",

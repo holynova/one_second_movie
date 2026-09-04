@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "one-second-movie",
+  "compatibility_date": "2026-09-04",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./dist"
+  },
+  "routes": [
+    { "pattern": "one-second-movie.xiaosang.cc", "custom_domain": true }
+  ]
+}

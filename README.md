@@ -1,5 +1,7 @@
 # One Second Movie / 一眼看电影
 
+Cloudflare 静态预览：[one-second-movie.xiaosang.cc](https://one-second-movie.xiaosang.cc/)
+
 > Transform any video into a comprehensive contact sheet - see an entire movie at a glance.
 > 
 > 将任何视频转换为联系表 - 一眼看完整部电影。
