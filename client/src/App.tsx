@@ -1,455 +1,515 @@
-import { useState } from 'react';
-import { Layout } from './components/Layout';
-import { Upload } from './components/Upload';
-
-const formatDuration = (seconds: number): string => {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${secs}s`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${secs}s`;
-  } else {
-    return `${secs}s`;
-  }
-};
-
-const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-};
-
-
-function App() {
-  const [file, setFile] = useState<File | null>(null);
-  const [processedImage, setProcessedImage] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
-  
-  const [videoMetadata, setVideoMetadata] = useState<{
-    duration: number;
-    size: number;
-  } | null>(null);
-  
-  const [outputStats, setOutputStats] = useState<{
-    totalFrames: number;
-    columns: number;
-    rows: number;
-    interval: number;
-  } | null>(null);
-
-  const [inputMode, setInputMode] = useState<'file' | 'url'>('file');
-  const [url, setUrl] = useState('');
-  
-  // Progress tracking
-  const [progress, setProgress] = useState(0);
-  const [processingStatus, setProcessingStatus] = useState('');
-
-  const handleFileSelect = async (selectedFile: File) => {
-    setFile(selectedFile);
-    setVideoMetadata({
-      duration: 0,
-      size: selectedFile.size
+import { useEffect, useRef, useState } from "react";
+import {
+  metadata,
+  extract,
+  sampleTimes,
+  timecode,
+  poster,
+  download,
+  type Frame,
+} from "./lib/video";
+import "./App.css";
+const palettes = [
+  "#233b3d",
+  "#2b4847",
+  "#395952",
+  "#526c59",
+  "#878564",
+  "#b5a376",
+  "#d2b78b",
+  "#bf9571",
+  "#94765e",
+  "#615e52",
+  "#3d514c",
+  "#213c41",
+];
+export default function App() {
+  const [source, setSource] = useState(""),
+    [name, setName] = useState(""),
+    [meta, setMeta] = useState({ duration: 0, width: 0, height: 0 }),
+    [frames, setFrames] = useState<Frame[]>([]),
+    [mode, setMode] = useState<"sheet" | "color">("sheet"),
+    [count, setCount] = useState(48),
+    [columns, setColumns] = useState(4),
+    [start, setStart] = useState(0),
+    [end, setEnd] = useState(0),
+    [busy, setBusy] = useState(""),
+    [progress, setProgress] = useState(0),
+    [error, setError] = useState(""),
+    [url, setUrl] = useState(""),
+    [remote, setRemote] = useState(false),
+    [active, setActive] = useState(0),
+    [zoom, setZoom] = useState(1);
+  const input = useRef<HTMLInputElement>(null),
+    video = useRef<HTMLVideoElement>(null),
+    controller = useRef<AbortController | null>(null),
+    current = useRef({ source, frames });
+  current.current = { source, frames };
+  useEffect(
+    () => () => {
+      controller.current?.abort();
+      if (current.current.source.startsWith("blob:"))
+        URL.revokeObjectURL(current.current.source);
+      current.current.frames.forEach((f) => URL.revokeObjectURL(f.url));
+    },
+    [],
+  );
+  function clear() {
+    setFrames((prev) => {
+      prev.forEach((f) => URL.revokeObjectURL(f.url));
+      return [];
     });
-    await processVideo(selectedFile);
-  };
-
-  const handleUrlSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url) return;
-    await processVideo(null, url);
-  };
-
-  const pollProgress = async (jobId: string) => {
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`http://localhost:3000/progress/${jobId}`);
-        if (!response.ok) {
-          clearInterval(pollInterval);
-          return;
-        }
-        
-        const data = await response.json();
-        setProgress(data.progress);
-        setProcessingStatus(data.status);
-        
-        if (data.complete) {
-          clearInterval(pollInterval);
-          
-          if (data.error) {
-            alert(data.error);
-            setFile(null);
-            setIsUploading(false);
-          } else if (data.result) {
-            setProcessedImage(`http://localhost:3000${data.result.processedPath}`);
-            
-            if (data.result.metadata) {
-              setVideoMetadata({
-                duration: data.result.metadata.duration,
-                size: data.result.metadata.size
-              });
-              setOutputStats({
-                totalFrames: data.result.metadata.totalFrames,
-                columns: data.result.metadata.columns,
-                rows: data.result.metadata.rows,
-                interval: data.result.metadata.interval
-              });
-            }
-            setIsUploading(false);
-          }
-        }
-      } catch (error) {
-        console.error('Error polling progress:', error);
-        clearInterval(pollInterval);
-        setIsUploading(false);
-      }
-    }, 500); // Poll every 500ms
-  };
-
-  const processVideo = async (selectedFile: File | null, videoUrl?: string) => {
-    setIsUploading(true);
-    setProcessedImage(null);
-    setOutputStats(null);
-    setProgress(0);
-    setProcessingStatus('Uploading...');
-    
+    setActive(0);
+  }
+  async function load(src: string, title: string) {
+    if (busy) return;
+    setBusy("正在读取视频");
+    setError("");
+    const c = new AbortController();
+    controller.current = c;
     try {
-      let response;
-      if (selectedFile) {
-        const formData = new FormData();
-        formData.append('video', selectedFile);
-        formData.append('quality', quality);
-
-        response = await fetch('http://localhost:3000/upload', {
-          method: 'POST',
-          body: formData,
-        });
-      } else if (videoUrl) {
-        response = await fetch('http://localhost:3000/process-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: videoUrl,
-            quality: quality
-          }),
-        });
-      } else {
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error('Processing failed');
-      }
-
-      const data = await response.json();
-      
-      // If we got a jobId, start polling for progress
-      if (data.jobId) {
-        pollProgress(data.jobId);
-      } else {
-        // Old API response format (for URL processing)
-        setProcessedImage(`http://localhost:3000${data.processedPath}`);
-        
-        if (data.metadata) {
-          setVideoMetadata({
-            duration: data.metadata.duration,
-            size: data.metadata.size
-          });
-          setOutputStats({
-            totalFrames: data.metadata.totalFrames,
-            columns: data.metadata.columns,
-            rows: data.metadata.rows,
-            interval: data.metadata.interval
-          });
-        }
-        setIsUploading(false);
-      }
-    } catch (error) {
-      console.error('Error processing video:', error);
-      alert('Processing failed');
-      setFile(null);
-      setIsUploading(false);
+      const m = await metadata(src, c.signal);
+      if (source.startsWith("blob:")) URL.revokeObjectURL(source);
+      clear();
+      setSource(src);
+      setName(title);
+      setMeta(m);
+      setStart(0);
+      setEnd(Math.floor(m.duration * 1000) / 1000);
+    } catch (e) {
+      if (src.startsWith("blob:")) URL.revokeObjectURL(src);
+      setError(c.signal.aborted ? "已取消读取。" : (e as Error).message);
+    } finally {
+      setBusy("");
+      controller.current = null;
+      if (input.current) input.current.value = "";
     }
-  };
-
+  }
+  function file(f?: File) {
+    if (!f || busy) return;
+    if (
+      !f.type.startsWith("video/") &&
+      !/\.(mp4|webm|mov|m4v)$/i.test(f.name)
+    ) {
+      setError("请选择视频文件。");
+      return;
+    }
+    load(URL.createObjectURL(f), f.name.replace(/\.[^.]+$/, ""));
+  }
+  async function generate() {
+    setError("");
+    const c = new AbortController();
+    controller.current = c;
+    try {
+      const times = sampleTimes(meta.duration, count, start, end);
+      setBusy("正在逐帧读取");
+      setProgress(0);
+      const next = await extract(source, times, c.signal, setProgress);
+      clear();
+      setFrames(next);
+    } catch (e) {
+      setError(
+        c.signal.aborted
+          ? "抽帧已取消，已有结果仍然保留。"
+          : (e as Error).message,
+      );
+    } finally {
+      setBusy("");
+      controller.current = null;
+    }
+  }
+  function seek(i: number) {
+    setActive(i);
+    if (video.current) video.current.currentTime = frames[i].time;
+  }
+  async function save() {
+    setBusy("正在生成海报");
+    try {
+      download(
+        await poster(frames, name, mode, columns),
+        `${name}-${mode}.png`,
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
   return (
-    <Layout>
-      <div className="max-w-4xl mx-auto">
-        {!file && !url ? (
-          <div className="py-12 space-y-8">
-            <div className="flex justify-center space-x-4 mb-8">
-              <button
-                onClick={() => setInputMode('file')}
-                className={`px-6 py-2 rounded-full transition-colors ${inputMode === 'file' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              >
-                Upload File
-              </button>
-              <button
-                onClick={() => setInputMode('url')}
-                className={`px-6 py-2 rounded-full transition-colors ${inputMode === 'url' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              >
-                Video URL
-              </button>
+    <div className="app">
+      <header>
+        <a className="logo" href="./">
+          <span className="logo-mark">◧</span> ONE SECOND MOVIE
+          <span className="version">/ 02</span>
+        </a>
+        <a
+          href="https://github.com/holynova/one_second_movie"
+          target="_blank"
+          rel="noreferrer"
+        >
+          GitHub ↗
+        </a>
+      </header>
+      <main>
+        <section className="hero">
+          <div>
+            <div className="eyebrow">THE WHOLE STORY. A SINGLE FRAME.</div>
+            <h1>
+              一眼，<em>看完整部电影。</em>
+            </h1>
+            <p>把时间铺成画面，把故事留成色彩。你的影片，也有另一种看法。</p>
+          </div>
+          <div className="hero-index">
+            FRAME BY FRAME
+            <br />
+            <b>影片视觉地图</b>
+          </div>
+        </section>
+        <div className="workspace">
+          <aside>
+            <div className="step">
+              01 <span>选择影片</span>
             </div>
-
-            <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
-              <h3 className="text-lg font-semibold mb-4">Output Quality</h3>
-              <div className="flex gap-4">
-                <label className="flex-1 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="quality"
-                    value="low"
-                    checked={quality === 'low'}
-                    onChange={(e) => setQuality(e.target.value as 'low' | 'medium' | 'high')}
-                    className="sr-only peer"
-                  />
-                  <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-4 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
-                    <div className="font-semibold text-white mb-1">Low</div>
-                    <div className="text-xs text-slate-400">32×32 grid</div>
-                    <div className="text-xs text-slate-500 mt-1">1,024 screenshots</div>
-                  </div>
-                </label>
-                <label className="flex-1 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="quality"
-                    value="medium"
-                    checked={quality === 'medium'}
-                    onChange={(e) => setQuality(e.target.value as 'low' | 'medium' | 'high')}
-                    className="sr-only peer"
-                  />
-                  <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-4 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
-                    <div className="font-semibold text-white mb-1">Medium</div>
-                    <div className="text-xs text-slate-400">64×64 grid</div>
-                    <div className="text-xs text-slate-500 mt-1">4,096 screenshots</div>
-                  </div>
-                </label>
-                <label className="flex-1 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="quality"
-                    value="high"
-                    checked={quality === 'high'}
-                    onChange={(e) => setQuality(e.target.value as 'low' | 'medium' | 'high')}
-                    className="sr-only peer"
-                  />
-                  <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-4 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
-                    <div className="font-semibold text-white mb-1">High</div>
-                    <div className="text-xs text-slate-400">128×128 grid</div>
-                    <div className="text-xs text-slate-500 mt-1">16,384 screenshots</div>
-                  </div>
-                </label>
-              </div>
+            <input
+              ref={input}
+              type="file"
+              accept="video/*"
+              hidden
+              onChange={(e) => file(e.target.files?.[0])}
+            />
+            <button
+              className="drop"
+              disabled={!!busy}
+              onClick={() => input.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                file(e.dataTransfer.files[0]);
+              }}
+            >
+              <span className="plus">＋</span>
+              <strong>{name || "放入一部影片"}</strong>
+              <small>{source ? "点击更换视频" : "拖入文件，或点击选择"}</small>
+              <span className="filetypes">MP4 / WEBM / MOV</span>
+            </button>
+            <div className="source-actions">
+              <button
+                disabled={!!busy}
+                onClick={() =>
+                  load(
+                    `${import.meta.env.BASE_URL}demo-film.mp4`,
+                    "暮色行旅 · 演示短片",
+                  )
+                }
+              >
+                试用演示短片 ↗
+              </button>
+              <button onClick={() => setRemote(!remote)}>视频链接</button>
             </div>
-
-            {inputMode === 'file' ? (
-              <Upload onFileSelect={handleFileSelect} />
-            ) : (
-              <form onSubmit={handleUrlSubmit} className="bg-slate-800/50 p-12 rounded-xl border border-slate-700 text-center">
-                <div className="max-w-md mx-auto">
+            {remote && (
+              <form
+                className="url-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  try {
+                    const u = new URL(url);
+                    if (!["https:", "http:"].includes(u.protocol))
+                      throw new Error();
+                    load(u.href, "远程影片");
+                  } catch {
+                    setError("请输入有效的 http(s) 视频直链。");
+                  }
+                }}
+              >
+                <label>
+                  支持跨域的公开视频直链
                   <input
                     type="url"
-                    placeholder="Enter video URL (e.g., http://example.com/video.mp4)"
+                    required
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 mb-4 focus:ring-2 focus:ring-purple-500 outline-none"
-                    required
+                    placeholder="https://…/movie.mp4"
                   />
-                  <button
-                    type="submit"
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-lg transition-colors"
-                  >
-                    Process URL
-                  </button>
-                </div>
+                </label>
+                <button disabled={!!busy}>读取</button>
+                <small>不支持视频网站的播放页面。</small>
               </form>
             )}
-          </div>
-        ) : (
-          <div className="space-y-8">
-            <div className="flex items-center justify-between bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-purple-600/20 rounded-full flex items-center justify-center text-purple-400">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-400">Current Video</p>
-                  <p className="font-medium text-white truncate max-w-md">
-                    {file ? file.name : url}
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => { setFile(null); setUrl(''); setProcessedImage(null); }}
-                className="text-sm text-slate-400 hover:text-white transition-colors"
-              >
-                Upload New Video
-              </button>
-            </div>
-
-            {videoMetadata && (
-              <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
-                <h3 className="text-lg font-semibold mb-4">Video Information</h3>
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <p className="text-sm text-slate-400 mb-1">Duration</p>
-                    <p className="text-lg font-medium text-white">{formatDuration(videoMetadata.duration)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-400 mb-1">File Size</p>
-                    <p className="text-lg font-medium text-white">{formatFileSize(videoMetadata.size)}</p>
-                  </div>
-                </div>
+            {source && (
+              <div className="file-meta">
+                <span>{timecode(meta.duration)}</span>
+                <span>
+                  {meta.width} × {meta.height}
+                </span>
               </div>
             )}
-
-            <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
-              <div className="flex items-end gap-6">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-4">Output Quality</h3>
-                  <div className="flex gap-4">
-                    <label className="flex-1 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="quality-regenerate"
-                        value="low"
-                        checked={quality === 'low'}
-                        onChange={(e) => setQuality(e.target.value as 'low' | 'medium' | 'high')}
-                        className="sr-only peer"
-                      />
-                      <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-3 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
-                        <div className="font-semibold text-white text-sm">Low</div>
-                        <div className="text-xs text-slate-500 mt-1">32×32</div>
-                      </div>
-                    </label>
-                    <label className="flex-1 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="quality-regenerate"
-                        value="medium"
-                        checked={quality === 'medium'}
-                        onChange={(e) => setQuality(e.target.value as 'low' | 'medium' | 'high')}
-                        className="sr-only peer"
-                      />
-                      <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-3 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
-                        <div className="font-semibold text-white text-sm">Medium</div>
-                        <div className="text-xs text-slate-500 mt-1">64×64</div>
-                      </div>
-                    </label>
-                    <label className="flex-1 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="quality-regenerate"
-                        value="high"
-                        checked={quality === 'high'}
-                        onChange={(e) => setQuality(e.target.value as 'low' | 'medium' | 'high')}
-                        className="sr-only peer"
-                      />
-                      <div className="bg-slate-900 border-2 border-slate-700 rounded-lg p-3 text-center transition-all peer-checked:border-purple-500 peer-checked:bg-purple-500/10 hover:border-slate-600">
-                        <div className="font-semibold text-white text-sm">High</div>
-                        <div className="text-xs text-slate-500 mt-1">128×128</div>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-                <button
-                  onClick={() => processVideo(file, url)}
-                  disabled={isUploading}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-2.5 rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed self-end"
+            <fieldset disabled={!!busy}>
+              <div className="step second">
+                02 <span>编排画面</span>
+              </div>
+              <label>
+                抽样帧数
+                <select
+                  value={count}
+                  onChange={(e) => {
+                    setCount(+e.target.value);
+                  }}
                 >
-                  {isUploading ? 'Processing...' : 'Regenerate'}
+                  <option value={24}>24 帧 · 精简</option>
+                  <option value={48}>48 帧 · 标准</option>
+                  <option value={96}>96 帧 · 细节</option>
+                </select>
+              </label>
+              <div className="time-fields">
+                <label>
+                  开始（秒）
+                  <input
+                    type="number"
+                    min={0}
+                    max={end}
+                    step="0.001"
+                    value={start}
+                    disabled={!source || !!busy}
+                    onChange={(e) => setStart(+e.target.value)}
+                  />
+                </label>
+                <label>
+                  结束（秒）
+                  <input
+                    type="number"
+                    min={start}
+                    max={meta.duration}
+                    step="0.001"
+                    value={end}
+                    disabled={!source || !!busy}
+                    onChange={(e) => setEnd(+e.target.value)}
+                  />
+                </label>
+              </div>
+              <label>
+                联系表列数
+                <div className="segments">
+                  {[3, 4, 6].map((n) => (
+                    <button
+                      key={n}
+                      className={columns === n ? "selected" : ""}
+                      onClick={() => setColumns(n)}
+                    >
+                      {n} 列
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <p className="muted">
+                等间隔抽样，保留画面比例。
+                <br />
+                每帧均可定位到影片中的原始时刻。
+              </p>
+            </fieldset>
+            <button
+              className="primary"
+              disabled={!source || !!busy}
+              onClick={generate}
+            >
+              {frames.length ? "重新生成" : "生成视觉地图"} <span>↗</span>
+            </button>
+            <p className="privacy">
+              <span>●</span> 本地视频始终留在你的浏览器
+            </p>
+            <div className="aside-footer">
+              每个故事，
+              <br />
+              都有自己的颜色。<span>LOOK CLOSER.</span>
+            </div>
+          </aside>
+          <section className="stage">
+            <div className="stage-toolbar">
+              <div className="view-tabs">
+                <button
+                  className={mode === "sheet" ? "active" : ""}
+                  onClick={() => setMode("sheet")}
+                >
+                  ▦ 联系表
+                </button>
+                <button
+                  className={mode === "color" ? "active" : ""}
+                  onClick={() => setMode("color")}
+                >
+                  ▥ 色彩长卷
                 </button>
               </div>
+              <button
+                className="export"
+                disabled={!frames.length || !!busy}
+                onClick={save}
+              >
+                ↓ 导出海报
+              </button>
             </div>
-
-            {isUploading && (
-              <div className="bg-slate-800/50 p-8 rounded-xl border border-slate-700">
-                <div className="space-y-6">
-                  {/* Status text */}
-                  <div className="text-center">
-                    <p className="text-lg font-medium text-white mb-1">
-                      {processingStatus || 'Processing...'}
-                    </p>
-                    <p className="text-sm text-slate-400">
-                      This may take a few minutes...
-                    </p>
-                  </div>
-                  
-                  {/* Progress bar */}
-                  <div className="relative">
-                    <div className="w-full bg-slate-700 rounded-full h-4 overflow-hidden">
-                      <div 
-                        className="bg-gradient-to-r from-purple-500 via-pink-500 to-purple-600 h-full transition-all duration-300 ease-out"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-xs font-bold text-white drop-shadow-lg">
-                        {progress}%
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {/* Spinner */}
-                  <div className="flex justify-center">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500" />
-                  </div>
-                </div>
+            {error && (
+              <div className="error" role="alert">
+                {error}
+                <button aria-label="关闭提示" onClick={() => setError("")}>
+                  ×
+                </button>
               </div>
             )}
-
-            {processedImage && !isUploading && (
-              <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 overflow-hidden animate-fade-in">
-                <img src={processedImage} alt="Processed Result" className="w-full h-auto rounded" />
-                
-                {outputStats && (
-                  <div className="mt-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700">
-                    <h4 className="text-sm font-semibold text-slate-300 mb-2">Output Statistics</h4>
-                    <div className="grid grid-cols-4 gap-4 text-center">
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Total Screenshots</p>
-                        <p className="text-lg font-bold text-purple-400">{outputStats.totalFrames.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Grid Size</p>
-                        <p className="text-lg font-bold text-purple-400">{outputStats.rows} × {outputStats.columns}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Interval</p>
-                        <p className="text-lg font-bold text-purple-400">{outputStats.interval}s</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Resolution</p>
-                        <p className="text-lg font-bold text-purple-400">3840×2160</p>
-                      </div>
-                    </div>
-                  </div>
+            {busy && (
+              <div className="progress" role="status">
+                <span>
+                  {busy}
+                  {busy === "正在逐帧读取" ? ` · ${progress}%` : ""}
+                </span>
+                {controller.current && (
+                  <button onClick={() => controller.current?.abort()}>
+                    取消
+                  </button>
                 )}
-                
-                <div className="mt-4 text-center">
-                  <a 
-                    href={processedImage} 
-                    download={`processed-${file ? file.name : 'video'}.jpg`}
-                    className="inline-block bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg transition-colors"
-                  >
-                    Download Image
-                  </a>
-                </div>
+                <progress value={progress} max={100} />
               </div>
             )}
-          </div>
-        )}
-      </div>
-    </Layout>
+            {!source ? (
+              <div className="empty">
+                <div className="empty-top">
+                  <span>STUDY Nº 001</span>
+                  <span>LIGHT / COLOR / TIME</span>
+                </div>
+                <div className="film-art">
+                  <div className="sun" />
+                  <div className="hill back" />
+                  <div className="hill front" />
+                  <div className="film-caption">
+                    INTO THE
+                    <br />
+                    <i>quiet.</i>
+                  </div>
+                  <span className="film-time">00:00:00</span>
+                </div>
+                <div className="palette">
+                  {palettes.map((c) => (
+                    <span key={c} style={{ background: c }} />
+                  ))}
+                </div>
+                <div className="empty-note">
+                  <h2>看见时间的形状</h2>
+                  <p>
+                    导入影片，生成专属于它的画面索引。
+                    <br />
+                    也可以先用演示短片，探索两种观看方式。
+                  </p>
+                </div>
+                <div className="empty-bottom">
+                  <span>01 / 导入</span>
+                  <span>02 / 抽样</span>
+                  <span>03 / 收藏</span>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="player-wrap">
+                  <video
+                    ref={video}
+                    src={source}
+                    controls
+                    preload="metadata"
+                    playsInline
+                  />
+                  <div className="player-caption">
+                    <span>{name}</span>
+                    <span>
+                      {frames.length
+                        ? `FRAME ${String(active + 1).padStart(2, "0")} / ${frames.length}`
+                        : "READY TO EXPLORE"}
+                    </span>
+                  </div>
+                </div>
+                {!frames.length ? (
+                  <div className="ready">
+                    <span>影片已就绪</span>
+                    <p>选择帧数和时间范围，点击「生成视觉地图」。</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="map-heading">
+                      <div>
+                        <span className="eyebrow">
+                          {mode === "sheet" ? "CONTACT SHEET" : "COLOR SCRIPT"}
+                        </span>
+                        <h2>
+                          {mode === "sheet" ? "故事的切片" : "时间的调色盘"}
+                        </h2>
+                      </div>
+                      <label className="zoom">
+                        缩放
+                        <select
+                          value={zoom}
+                          onChange={(e) => setZoom(+e.target.value)}
+                        >
+                          <option value={1}>100%</option>
+                          <option value={1.5}>150%</option>
+                          <option value={2}>200%</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="map-scroll">
+                      <div style={{ width: `${zoom * 100}%` }}>
+                        {mode === "sheet" ? (
+                          <div
+                            className="frame-grid"
+                            style={{
+                              gridTemplateColumns: `repeat(${columns},minmax(0,1fr))`,
+                            }}
+                          >
+                            {frames.map((f, i) => (
+                              <button
+                                className={`frame ${active === i ? "current" : ""}`}
+                                key={f.url}
+                                onClick={() => seek(i)}
+                                aria-label={`定位 ${timecode(f.time)}`}
+                              >
+                                <img
+                                  src={f.url}
+                                  alt={`影片 ${timecode(f.time)}`}
+                                />
+                                <span>
+                                  <b>{String(i + 1).padStart(2, "0")}</b>
+                                  {timecode(f.time)}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="color-map">
+                            {frames.map((f, i) => (
+                              <button
+                                className={active === i ? "current" : ""}
+                                key={f.url}
+                                onClick={() => seek(i)}
+                                style={{ background: f.color }}
+                                aria-label={`定位色彩帧 ${timecode(f.time)}`}
+                                title={timecode(f.time)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="timeline-labels">
+                      <span>{timecode(frames[0].time)}</span>
+                      <span>点击画面，回到那个瞬间</span>
+                      <span>{timecode(frames[frames.length - 1].time)}</span>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+        <footer>
+          <span>ONE SECOND MOVIE — 影片视觉地图</span>
+          <span>Made for the moments in between.</span>
+        </footer>
+      </main>
+    </div>
   );
 }
-
-export default App;

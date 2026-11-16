@@ -141,3 +141,4 @@ vite.config.ts.timestamp-*
 .vite/
 server/public/uploads
 *.mp4
+!client/public/demo-film.mp4

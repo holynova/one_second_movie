@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"cd server && pnpm dev\" \"cd client && pnpm dev\""
+    "dev": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "preview": "npm --prefix client run preview",
+    "dev:legacy": "concurrently \"cd server && pnpm dev\" \"cd client && pnpm dev\"",
+    "test": "node --test tests/*.test.mjs"
   },
   "keywords": [],
   "author": "",
