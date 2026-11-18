@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="360" viewBox="0 0 1200 360"
+     role="img" aria-labelledby="title desc">
+  <title id="title">一眼看电影 One Second Movie — 把整部电影抽成联系表与色彩长卷，一眼看完</title>
+  <desc id="desc">深绿黑底：左上标题一眼看电影；右侧胶片条，四格日落山峦小帧排成一行，下方是十二段色彩长卷色条。</desc>
+
+  <rect width="1200" height="360" rx="26" fill="#161a13"/>
+
+  <g id="title-block" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <text x="56" y="62" font-size="19" letter-spacing="3" fill="#a8c09a">影片视觉地图 · VIDEO CONTACT SHEET</text>
+    <text x="56" y="128" font-size="62" font-weight="700" fill="#f2eeda">一眼看电影</text>
+    <text x="56" y="168" font-size="23" fill="#d8dcc8">ONE SECOND MOVIE — 把时间铺成画面</text>
+    <text x="56" y="204" font-size="19" fill="#a8c09a">本地抽帧，整部电影一眼看完；视频不上传。</text>
+    <g id="chips" font-size="18" fill="#f2eeda" text-anchor="middle">
+      <g><rect x="56" y="238" width="150" height="36" rx="18" fill="#232a1e" stroke="#4a5a40" stroke-width="1.5"/><text x="131" y="262">24 / 48 / 96 帧</text></g>
+      <g><rect x="218" y="238" width="186" height="36" rx="18" fill="#232a1e" stroke="#4a5a40" stroke-width="1.5"/><text x="311" y="262">联系表 + 色彩长卷</text></g>
+      <g><rect x="416" y="238" width="174" height="36" rx="18" fill="#232a1e" stroke="#4a5a40" stroke-width="1.5"/><text x="503" y="262">2400px 海报导出</text></g>
+      <g><rect x="602" y="238" width="138" height="36" rx="18" fill="#232a1e" stroke="#4a5a40" stroke-width="1.5"/><text x="671" y="262">本地不上传</text></g>
+    </g>
+  </g>
+
+  <g id="filmstrip">
+    <rect x="800" y="56" width="344" height="264" rx="12" fill="#0e120b" stroke="#4a5a40" stroke-width="1.5"/>
+    <g id="frames">
+      <g><rect x="816" y="72" width="74" height="54" rx="4" fill="#3d5a4a"/><circle cx="868" cy="88" r="9" fill="#f2e8c9"/><path d="M 816 112 Q 850 96 890 112 L 890 126 L 816 126 Z" fill="#1e3327"/></g>
+      <g><rect x="898" y="72" width="74" height="54" rx="4" fill="#5a6a52"/><circle cx="950" cy="88" r="9" fill="#f2e8c9"/><path d="M 898 112 Q 932 96 972 112 L 972 126 L 898 126 Z" fill="#2a3d2e"/></g>
+      <g><rect x="980" y="72" width="74" height="54" rx="4" fill="#6a7a5a"/><circle cx="1032" cy="88" r="9" fill="#f2e8c9"/><path d="M 980 112 Q 1014 96 1054 112 L 1054 126 L 980 126 Z" fill="#33482f"/></g>
+      <g><rect x="1062" y="72" width="74" height="54" rx="4" fill="#7a8a62"/><circle cx="1114" cy="88" r="9" fill="#f2e8c9"/><path d="M 1062 112 Q 1096 96 1136 112 L 1136 126 L 1062 126 Z" fill="#3d5233"/></g>
+      <g><rect x="816" y="134" width="74" height="54" rx="4" fill="#4a6a58"/><circle cx="868" cy="150" r="9" fill="#f2e8c9"/><path d="M 816 174 Q 850 158 890 174 L 890 188 L 816 188 Z" fill="#243b2b"/></g>
+      <g><rect x="898" y="134" width="74" height="54" rx="4" fill="#5a7a60"/><circle cx="950" cy="150" r="9" fill="#f2e8c9"/><path d="M 898 174 Q 932 158 972 174 L 972 188 L 898 188 Z" fill="#2e4430"/></g>
+      <g><rect x="980" y="134" width="74" height="54" rx="4" fill="#6a8a68"/><circle cx="1032" cy="150" r="9" fill="#f2e8c9"/><path d="M 980 174 Q 1014 158 1054 174 L 1054 188 L 980 188 Z" fill="#385035"/></g>
+      <g><rect x="1062" y="134" width="74" height="54" rx="4" fill="#7a9a70"/><circle cx="1114" cy="150" r="9" fill="#f2e8c9"/><path d="M 1062 174 Q 1096 158 1136 174 L 1136 188 L 1062 188 Z" fill="#425a38"/></g>
+    </g>
+    <g id="frame-labels" font-family="ui-monospace, Menlo, monospace" font-size="13" fill="#a8c09a">
+      <text x="816" y="208">FRAME 01 / 48</text>
+      <text x="1136" y="208" text-anchor="end">00:00 → 00:06</text>
+    </g>
+    <g id="color-strip">
+      <rect x="816" y="220" width="26" height="26" rx="3" fill="#2c4a4d"/>
+      <rect x="845" y="220" width="26" height="26" rx="3" fill="#3d5a4a"/>
+      <rect x="874" y="220" width="26" height="26" rx="3" fill="#4a6a58"/>
+      <rect x="903" y="220" width="26" height="26" rx="3" fill="#5a7a60"/>
+      <rect x="932" y="220" width="26" height="26" rx="3" fill="#7a8a62"/>
+      <rect x="961" y="220" width="26" height="26" rx="3" fill="#a89a6a"/>
+      <rect x="990" y="220" width="26" height="26" rx="3" fill="#c9b878"/>
+      <rect x="1019" y="220" width="26" height="26" rx="3" fill="#d8c890"/>
+      <rect x="1048" y="220" width="26" height="26" rx="3" fill="#c9a078"/>
+      <rect x="1077" y="220" width="26" height="26" rx="3" fill="#a87868"/>
+      <rect x="1106" y="220" width="26" height="26" rx="3" fill="#7a6a58"/>
+    </g>
+    <g id="strip-label" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+      <text x="816" y="280" font-size="16" fill="#a8c09a">色彩长卷：每帧平均颜色，点击定位同一时刻</text>
+    </g>
+  </g>
+</svg>
